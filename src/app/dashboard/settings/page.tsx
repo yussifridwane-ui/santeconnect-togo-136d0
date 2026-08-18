@@ -109,14 +109,35 @@ export default function SettingsPage() {
   const formReady =
     password.current.length > 0 && password.new.length >= 6 && matches && !pwdSaving;
 
+  const [profileError, setProfileError] = useState("");
+
+  /* 👤 V3.2 — appel du VRAI moteur serveur : nom + téléphone persistés en
+     base, jeton de session rebadgé (nouveau nom affiché partout), audit.
+     L'email (identifiant de connexion) reste volontairement non modifiable. */
   const handleSaveProfile = async () => {
+    if (saving) return;
+    setProfileError("");
+    if (profile.fullName.trim().length < 2) {
+      return setProfileError("Le nom complet doit contenir au moins 2 lettres.");
+    }
     setSaving(true);
     try {
-      await new Promise((r) => setTimeout(r, 1000));
+      const res = await fetch("/api/auth/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName: profile.fullName, phone: profile.phone }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setProfileError(data.error || "Enregistrement impossible pour le moment.");
+        return;
+      }
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (e) {
-      console.error(e);
+      /* petit délai pour laisser voir « Sauvegardé ! », puis rechargement
+         pour propager le nouveau nom dans toute l'interface */
+      setTimeout(() => window.location.reload(), 900);
+    } catch {
+      setProfileError("Réseau indisponible. Réessayez.");
     } finally {
       setSaving(false);
     }
@@ -210,23 +231,34 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={profile.email}
-                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email{" "}
+                  <span className="text-xs font-normal text-gray-400">
+                    (identifiant de connexion — non modifiable)
+                  </span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={profile.email}
+                    disabled
+                    title="Votre email est votre identifiant de connexion : contactez l'administrateur pour le changer."
+                    className="w-full px-3 py-2 pr-9 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
+                  />
+                  <Lock size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
                 <input
+                  type="tel"
                   value={profile.phone}
+                  placeholder="+228 __ __ __ __"
                   onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
               </div>
-              <div className="pt-2">
+              <div className="pt-2 space-y-2">
                 <button
                   onClick={handleSaveProfile}
                   disabled={saving}
@@ -235,6 +267,11 @@ export default function SettingsPage() {
                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                   {saved ? "Sauvegardé !" : saving ? "Sauvegarde..." : "Sauvegarder"}
                 </button>
+                {profileError && (
+                  <p className="flex items-center gap-1.5 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                    <AlertTriangle size={15} className="flex-shrink-0" /> {profileError}
+                  </p>
+                )}
               </div>
             </div>
           </div>
